@@ -251,7 +251,7 @@ Content-Type: application/json</pre>
           <div class="spec-connection-box">
             <div class="connection-line">
               <span>接入地址</span>
-              <b>http://&lt;sxdevops地址&gt;{{ endpointFor(activeSource) }}</b>
+              <b>http://&lt;HYSDevOps地址&gt;{{ endpointFor(activeSource) }}</b>
             </div>
             <div class="connection-line">
               <span>接入令牌</span>

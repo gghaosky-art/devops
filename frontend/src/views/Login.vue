@@ -4,9 +4,9 @@
       <section class="auth-overview">
         <header class="brand-row">
           <div class="brand-identity">
-            <img src="@/assets/brand-mark.svg" alt="SxDevOps" class="brand-mark-image" />
+            <img src="@/assets/brand-mark.svg" alt="HYSDevOps" class="brand-mark-image" />
             <div class="brand-copy">
-              <strong>SxDevOps · AI Agent</strong>
+              <strong>HYSDevOps · AI Agent</strong>
               <span class="brand-motto">
                 <span>思而后行</span>
                 <el-icon class="brand-motto-icon"><TrendCharts /></el-icon>
@@ -58,7 +58,7 @@
       <section class="auth-panel">
         <div class="auth-panel-inner">
           <h2>登录工作台</h2>
-          <p class="auth-subtitle">使用平台账号进入 SxDevOps</p>
+          <p class="auth-subtitle">使用平台账号进入 HYSDevOps</p>
 
           <el-form class="login-form" :model="form" label-position="top" @submit.prevent="handleLogin">
             <el-form-item label="用户名">

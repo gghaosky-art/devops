@@ -26,8 +26,8 @@ const authStore = useAuthStore(pinia)
 
 router.afterEach((to) => {
     const title = typeof to.meta?.title === 'string' && to.meta.title.trim()
-        ? `${to.meta.title} - SxDevOps`
-        : 'SxDevOps 运维智能体平台'
+        ? `${to.meta.title} - HYSDevOps`
+        : 'HYSDevOps 运维智能体平台'
     document.title = title
 })
 

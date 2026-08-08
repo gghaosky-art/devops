@@ -144,7 +144,7 @@
         <div v-if="canViewMcpServer" class="mcp-server-panel">
           <div class="section-toolbar audit-toolbar">
             <div class="toolbar-head">
-              <span class="toolbar-title">sxdevops 对外 MCP Server</span>
+              <span class="toolbar-title">HYSDevOps 对外 MCP Server</span>
               <span class="toolbar-desc">外部 Agent 通过 Token 鉴权调用平台只读工具，所有调用进入审计</span>
             </div>
           </div>

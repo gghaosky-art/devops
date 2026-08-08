@@ -152,7 +152,7 @@ function initTerminal() {
   terminal.loadAddon(fitAddon)
   terminal.open(terminalRef.value)
   fitAddon.fit()
-  terminal.writeln('\x1b[1;36mSxDevOps Pod Terminal\x1b[0m')
+  terminal.writeln('\x1b[1;36mHYSDevOps Pod Terminal\x1b[0m')
   terminal.writeln('\x1b[2mConnecting to pod...\x1b[0m')
   terminal.writeln('')
 
