@@ -61,7 +61,7 @@ const activeTab = ref('datasources')
 const snapshotLoading = ref(false)
 const validOrderStatuses = ['pending', 'approved', 'rejected', 'executed', 'failed']
 const snapshotStats = ref({
-  datasources: { total: 0, active: 0, mysql: 0, mongodb: 0 },
+  datasources: { total: 0, active: 0, byType: {} },
   orders: { total: 0, pending: 0, approved: 0, failed: 0 },
   queries: { total: 0, loaded: 0, rows: 0, avgDuration: 0 },
 })
@@ -123,7 +123,7 @@ const availableTabs = computed(() => {
 
 const activeTabDescription = computed(() => {
   const descMap = {
-    datasources: '维护 MySQL / PolarDB / MongoDB 数据源，支持测试连接与库列表发现。',
+    datasources: '维护 MySQL / PolarDB / MongoDB / SQL Server 数据源，支持测试连接与库、Schema 发现。',
     orders: '覆盖提交、预检查、审核与执行链路，适合演示标准数据库变更流程。',
     query: '只读查询入口，支持 SQL / MongoDB 查询并自动沉淀到历史记录。',
   }
@@ -205,8 +205,12 @@ async function loadSnapshotStats() {
     snapshotStats.value.datasources = {
       total: datasourceRes.status === 'fulfilled' ? (datasourceRes.value?.count ?? datasourceItems.length) : 0,
       active: datasourceItems.filter(item => item.is_active).length,
-      mysql: datasourceItems.filter(item => item.db_type === 'mysql').length,
-      mongodb: datasourceItems.filter(item => item.db_type === 'mongodb').length,
+      // 按实际数据聚合，新增数据源类型时这里不用改
+      byType: datasourceItems.reduce((result, item) => {
+        const type = item.db_type || 'mysql'
+        result[type] = (result[type] || 0) + 1
+        return result
+      }, {}),
     }
 
     const orderItems = orderRes.status === 'fulfilled' ? (orderRes.value?.results || orderRes.value || []) : []

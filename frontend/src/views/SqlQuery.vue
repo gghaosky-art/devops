@@ -26,8 +26,12 @@
             </el-option>
           </el-select>
           <el-select v-model="selectedDb" placeholder="选择数据库" style="width: 200px"
-            :loading="dbLoading" filterable>
+            :loading="dbLoading" filterable @change="onDbChange">
             <el-option v-for="db in databases" :key="db" :label="db" :value="db" />
+          </el-select>
+          <el-select v-if="supportsSchema" v-model="selectedSchema" placeholder="选择 Schema"
+            style="width: 160px" :loading="schemaLoading" filterable clearable>
+            <el-option v-for="item in schemas" :key="item" :label="item" :value="item" />
           </el-select>
           <el-input v-model="submitter" placeholder="操作人" style="width: 130px" disabled />
         </div>
@@ -101,9 +105,13 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getDataSources, getDataSourceDatabases, submitQuery, getQueryOrders } from '@/api/modules/sqlaudit'
+import {
+  getDataSources, getDataSourceDatabases, getDataSourceSchemas, submitQuery, getQueryOrders,
+} from '@/api/modules/sqlaudit'
 import { useAuthStore } from '@/stores/auth'
-import { getDatasourceTypeLabel, getQueryPlaceholder } from '@/utils/sqlaudit'
+import {
+  datasourceSupportsSchema, getDatasourceTypeLabel, getQueryHint, getQueryPlaceholder,
+} from '@/utils/sqlaudit'
 
 defineProps({
   embedded: {
@@ -119,6 +127,9 @@ const dbLoading = ref(false)
 
 const selectedDs = ref(null)
 const selectedDb = ref('')
+const selectedSchema = ref('')
+const schemas = ref([])
+const schemaLoading = ref(false)
 const sqlContent = ref('')
 const submitter = ref(authStore.currentUser?.username || 'admin')
 const querying = ref(false)
@@ -133,10 +144,9 @@ const canViewQueries = computed(() => authStore.hasPermission('sqlaudit.query.vi
 const canExecuteQueries = computed(() => authStore.hasPermission('sqlaudit.query.execute'))
 const currentDatasource = computed(() => datasources.value.find(ds => ds.id === selectedDs.value) || null)
 const currentDatasourceType = computed(() => currentDatasource.value?.db_type || 'mysql')
+const supportsSchema = computed(() => datasourceSupportsSchema(currentDatasourceType.value))
 const queryPlaceholder = computed(() => getQueryPlaceholder(currentDatasourceType.value))
-const queryHint = computed(() => currentDatasourceType.value === 'mongodb'
-  ? 'MongoDB 查询支持 find / aggregate / count / distinct 四种命令格式'
-  : 'MySQL / PolarDB 查询仅允许 SELECT / SHOW / DESC 语句')
+const queryHint = computed(() => getQueryHint(currentDatasourceType.value))
 
 const formatTime = (t) => t ? new Date(t).toLocaleString('zh-CN') : ''
 
@@ -147,8 +157,14 @@ const loadDatasources = async () => {
   } catch (e) { console.error(e) }
 }
 
+const resetSchema = () => {
+  selectedSchema.value = ''
+  schemas.value = []
+}
+
 const onDsChange = async (dsId) => {
   selectedDb.value = ''
+  resetSchema()
   if (!dsId) { databases.value = []; return }
   dbLoading.value = true
   try {
@@ -160,6 +176,19 @@ const onDsChange = async (dsId) => {
   } finally { dbLoading.value = false }
 }
 
+const onDbChange = async (database) => {
+  resetSchema()
+  if (!database || !supportsSchema.value) return
+  schemaLoading.value = true
+  try {
+    const res = await getDataSourceSchemas(selectedDs.value, database)
+    schemas.value = res.schemas || []
+  } catch (e) {
+    schemas.value = []
+    ElMessage.warning('获取 Schema 列表失败')
+  } finally { schemaLoading.value = false }
+}
+
 const handleQuery = async () => {
   if (!sqlContent.value.trim()) return
   querying.value = true
@@ -169,6 +198,7 @@ const handleQuery = async () => {
     const res = await submitQuery({
       datasource: selectedDs.value,
       database: selectedDb.value,
+      schema: selectedSchema.value,
       sql_content: sqlContent.value,
       submitter: submitter.value,
     })

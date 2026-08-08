@@ -7,6 +7,7 @@ export const updateDataSource = (id, data) => request.put(`/sqlaudit/datasources
 export const deleteDataSource = (id) => request.delete(`/sqlaudit/datasources/${id}/`)
 export const testDataSourceConnection = (id) => request.post(`/sqlaudit/datasources/${id}/test_connection/`)
 export const getDataSourceDatabases = (id) => request.get(`/sqlaudit/datasources/${id}/databases/`)
+export const getDataSourceSchemas = (id, database) => request.get(`/sqlaudit/datasources/${id}/schemas/`, { params: { database } })
 
 // SQL 工单
 export const getSqlOrders = (params) => request.get('/sqlaudit/orders/', { params })

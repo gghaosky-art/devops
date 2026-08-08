@@ -38,6 +38,7 @@ class DataSourceViewSet(EventWallModelViewSetMixin, RBACPermissionMixin, viewset
         'destroy': ['sqlaudit.datasource.view', 'sqlaudit.datasource.manage'],
         'test_connection': ['sqlaudit.datasource.view', 'sqlaudit.datasource.manage'],
         'databases': ['sqlaudit.datasource.view'],
+        'schemas': ['sqlaudit.datasource.view'],
     }
 
     @action(detail=True, methods=['post'])
@@ -69,6 +70,18 @@ class DataSourceViewSet(EventWallModelViewSetMixin, RBACPermissionMixin, viewset
         ds = self.get_object()
         databases = db_executor.get_databases(ds)
         return Response({'databases': databases})
+
+    @action(detail=True, methods=['get'])
+    def schemas(self, request, pk=None):
+        """
+        列出指定库下的 schema。只有 SQL Server 有这个维度，其余类型返回空列表，
+        前端据此隐藏下拉，不必在前端硬编码类型判断。
+        """
+        ds = self.get_object()
+        database = (request.query_params.get('database') or '').strip()
+        if not database:
+            return Response({'schemas': []})
+        return Response({'schemas': db_executor.get_schemas(ds, database)})
 
 
 class SqlOrderViewSet(RBACPermissionMixin, viewsets.ModelViewSet):

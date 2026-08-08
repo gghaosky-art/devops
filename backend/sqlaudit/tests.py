@@ -141,6 +141,31 @@ class SqlAuditRBACTests(TestCase):
         self.assertEqual(order.reviewer, '')
         self.assertEqual(order.review_comment, '')
 
+    @patch('sqlaudit.views.db_executor.get_schemas', return_value=['dbo', 'report'])
+    def test_schemas_endpoint_requires_database_param(self, mock_get_schemas):
+        user = self.create_user_with_permissions('schema-reader', ['sqlaudit.datasource.view'])
+        self.client.force_login(user)
+
+        without_param = self.client.get(f'/api/sqlaudit/datasources/{self.datasource.id}/schemas/')
+        self.assertEqual(without_param.status_code, 200)
+        self.assertEqual(without_param.json(), {'schemas': []})
+        mock_get_schemas.assert_not_called()
+
+        with_param = self.client.get(
+            f'/api/sqlaudit/datasources/{self.datasource.id}/schemas/?database=billing',
+        )
+        self.assertEqual(with_param.status_code, 200)
+        self.assertEqual(with_param.json(), {'schemas': ['dbo', 'report']})
+        mock_get_schemas.assert_called_once()
+
+    def test_schemas_endpoint_requires_permission(self):
+        user = self.create_user_with_permissions('no-datasource-view', ['sqlaudit.order.view'])
+        self.client.force_login(user)
+        response = self.client.get(
+            f'/api/sqlaudit/datasources/{self.datasource.id}/schemas/?database=billing',
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_query_execute_requires_datasource_view(self):
         user = self.create_user_with_permissions('query-only', ['sqlaudit.query.execute'])
         self.client.force_login(user)

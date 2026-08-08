@@ -34,7 +34,7 @@
         </el-table-column>
         <el-table-column prop="user" label="用户名" width="120" />
         <el-table-column label="字符集" width="100">
-          <template #default="{ row }">{{ row.db_type === 'mongodb' ? '-' : row.charset }}</template>
+          <template #default="{ row }">{{ datasourceUsesCharset(row.db_type) ? row.charset : '-' }}</template>
         </el-table-column>
         <el-table-column prop="is_active" label="状态" width="90">
           <template #default="{ row }">
@@ -82,14 +82,18 @@
           <el-input-number v-model="form.port" :min="1" :max="65535" style="width:100%" />
         </el-form-item>
         <el-form-item label="用户名">
-          <el-input v-model="form.user" :placeholder="form.db_type === 'mongodb' ? '例如 admin' : '例如 root'" />
+          <el-input v-model="form.user" :placeholder="userPlaceholder" />
+          <div v-if="form.db_type === 'sqlserver'" class="form-item-hint">
+            SQL Server 没有会话级只读机制，用于查询工单的数据源请配 db_datareader 角色的登录名，
+            平台的 SQL 文本校验只是第二层防护。
+          </div>
         </el-form-item>
         <el-form-item label="密码">
           <el-input v-model="form.password" type="password" show-password
             :placeholder="editingId ? '留空则不修改' : '请输入密码'" />
         </el-form-item>
         <el-form-item label="字符集">
-          <el-select v-model="form.charset" style="width:100%" :disabled="form.db_type === 'mongodb'">
+          <el-select v-model="form.charset" style="width:100%" :disabled="!datasourceUsesCharset(form.db_type)">
             <el-option label="utf8mb4" value="utf8mb4" />
             <el-option label="utf8" value="utf8" />
             <el-option label="latin1" value="latin1" />
@@ -121,7 +125,9 @@ import {
 } from '@/api/modules/sqlaudit'
 import { useAuthStore } from '@/stores/auth'
 import {
+  DATASOURCE_KNOWN_PORTS,
   DATASOURCE_TYPE_OPTIONS,
+  datasourceUsesCharset,
   getDatasourceDefaultPort,
   getDatasourceTypeLabel,
 } from '@/utils/sqlaudit'
@@ -150,6 +156,11 @@ const defaultForm = {
 }
 const form = ref({ ...defaultForm })
 const canManageSqlDatasources = computed(() => authStore.hasPermission('sqlaudit.datasource.manage'))
+const userPlaceholder = computed(() => {
+  if (form.value.db_type === 'mongodb') return '例如 admin'
+  if (form.value.db_type === 'sqlserver') return '例如 sa 或只读账号'
+  return '例如 root'
+})
 
 const fetchData = async () => {
   loading.value = true
@@ -181,12 +192,13 @@ const openDialog = (row) => {
 
 const handleTypeChange = (nextType) => {
   const currentPort = form.value.port
-  const useDefaultPort = !editingId.value || currentPort === 3306 || currentPort === 27017
+  // 端口还停在某个类型的默认值上，说明用户没手动改过，可以跟着类型走
+  const useDefaultPort = !editingId.value || DATASOURCE_KNOWN_PORTS.includes(currentPort)
   form.value.db_type = nextType
   if (useDefaultPort) {
     form.value.port = getDatasourceDefaultPort(nextType)
   }
-  if (nextType === 'mongodb') {
+  if (!datasourceUsesCharset(nextType)) {
     form.value.charset = 'utf8mb4'
   }
 }
@@ -239,6 +251,12 @@ onMounted(fetchData)
 </script>
 
 <style scoped>
+.form-item-hint {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
 </style>
 
 

@@ -91,9 +91,19 @@
         </el-form-item>
         <el-form-item label="目标数据库">
           <el-select v-model="form.database" placeholder="选择数据库" style="width:100%"
-            :loading="dbLoading" filterable>
+            :loading="dbLoading" filterable @change="onDatabaseChange">
             <el-option v-for="db in databases" :key="db" :label="db" :value="db" />
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="supportsSchema" label="Schema">
+          <el-select v-model="form.schema" placeholder="选择 Schema" style="width:100%"
+            :loading="schemaLoading" filterable clearable>
+            <el-option v-for="item in schemas" :key="item" :label="item" :value="item" />
+          </el-select>
+          <div class="content-hint">
+            T-SQL 的默认 schema 绑定在数据库用户上，这里选定的值只作审计记录，
+            SQL 中访问非默认 schema 仍需写全限定名。
+          </div>
         </el-form-item>
         <el-form-item label="变更类型">
           <el-radio-group v-model="form.sql_type">
@@ -142,6 +152,7 @@
           <el-descriptions-item label="数据源">{{ detailOrder.datasource_name }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ getDatasourceTypeLabel(detailOrder.datasource_db_type) }}</el-descriptions-item>
           <el-descriptions-item label="数据库">{{ detailOrder.database }}</el-descriptions-item>
+          <el-descriptions-item label="Schema">{{ detailOrder.schema || '-' }}</el-descriptions-item>
           <el-descriptions-item label="变更类型">{{ detailOrder.sql_type }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusTagType(detailOrder.status)" size="small">{{ detailOrder.status_display }}</el-tag>
@@ -216,9 +227,10 @@ import {
   getSqlOrders, createSqlOrder, approveSqlOrder,
   rejectSqlOrder, executeSqlOrder, checkSql, getSqlOrderDetail,
 } from '@/api/modules/sqlaudit'
-import { getDataSources, getDataSourceDatabases } from '@/api/modules/sqlaudit'
+import { getDataSources, getDataSourceDatabases, getDataSourceSchemas } from '@/api/modules/sqlaudit'
 import { useAuthStore } from '@/stores/auth'
 import {
+  datasourceSupportsSchema,
   getDatasourceTypeLabel,
   getOrderHint,
   getOrderPlaceholder,
@@ -247,13 +259,15 @@ const validStatuses = ['pending', 'approved', 'rejected', 'executed', 'failed']
 const datasources = ref([])
 const databases = ref([])
 const dbLoading = ref(false)
+const schemas = ref([])
+const schemaLoading = ref(false)
 
 const submitVisible = ref(false)
 const submitting = ref(false)
 const checking = ref(false)
 const checkResults = ref([])
 const form = ref({
-  title: '', datasource: null, database: '', sql_type: 'DML',
+  title: '', datasource: null, database: '', schema: '', sql_type: 'DML',
   sql_content: '', submitter: authStore.currentUser?.username || 'admin',
 })
 
@@ -271,6 +285,7 @@ const canReviewOrders = computed(() => authStore.hasPermission('sqlaudit.order.r
 const canExecuteOrders = computed(() => authStore.hasPermission('sqlaudit.order.execute'))
 const currentDatasource = computed(() => datasources.value.find(ds => ds.id === form.value.datasource) || null)
 const currentDatasourceType = computed(() => currentDatasource.value?.db_type || 'mysql')
+const supportsSchema = computed(() => datasourceSupportsSchema(currentDatasourceType.value))
 const contentPlaceholder = computed(() => getOrderPlaceholder(currentDatasourceType.value))
 const orderHint = computed(() => getOrderHint(currentDatasourceType.value))
 
@@ -345,8 +360,14 @@ const loadDatasources = async () => {
   } catch (e) { console.error(e) }
 }
 
+const resetSchema = () => {
+  form.value.schema = ''
+  schemas.value = []
+}
+
 const onDatasourceChange = async (dsId) => {
   form.value.database = ''
+  resetSchema()
   if (!dsId) { databases.value = []; return }
   dbLoading.value = true
   try {
@@ -358,12 +379,26 @@ const onDatasourceChange = async (dsId) => {
   } finally { dbLoading.value = false }
 }
 
+const onDatabaseChange = async (database) => {
+  resetSchema()
+  if (!database || !supportsSchema.value) return
+  schemaLoading.value = true
+  try {
+    const res = await getDataSourceSchemas(form.value.datasource, database)
+    schemas.value = res.schemas || []
+  } catch (e) {
+    schemas.value = []
+    ElMessage.warning('获取 Schema 列表失败')
+  } finally { schemaLoading.value = false }
+}
+
 const openSubmitDialog = () => {
   form.value = {
-    title: '', datasource: null, database: '', sql_type: 'DML',
+    title: '', datasource: null, database: '', schema: '', sql_type: 'DML',
     sql_content: '', submitter: authStore.currentUser?.username || 'admin',
   }
   databases.value = []
+  schemas.value = []
   checkResults.value = []
   loadDatasources()
   submitVisible.value = true
