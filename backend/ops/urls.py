@@ -5,6 +5,7 @@ from . import loki_views
 from . import log_views
 from . import docker_views
 from . import k8s_views
+from . import k8s_workspace_views
 from . import observability_views
 
 router = DefaultRouter()
@@ -36,6 +37,8 @@ router.register(r'observability/datasource-links', observability_views.Observabi
 router.register(r'observability/tracing/datasources', observability_views.TracingDataSourceViewSet, basename='tracing-datasource')
 router.register(r'observability/metric/datasources', observability_views.MetricDataSourceViewSet, basename='metric-datasource')
 router.register(r'k8s/clusters', k8s_views.K8sClusterViewSet)
+router.register(r'k8s/workspaces', k8s_workspace_views.K8sWorkspaceViewSet, basename='k8s-workspace')
+router.register(r'k8s/projects', k8s_workspace_views.K8sProjectViewSet, basename='k8s-project')
 router.register(r'docker/hosts', docker_views.DockerHostViewSet)
 urlpatterns = [
     path('dashboard/stats/', views.dashboard_stats, name='dashboard-stats'),

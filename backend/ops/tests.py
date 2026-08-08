@@ -2339,7 +2339,7 @@ class ContainerManagementTests(TestCase):
         self.assertIn('server: https://k8s.example.com:6443', rendered)
         self.assertNotIn('server: https://203.0.113.176:6443', rendered)
 
-    @patch('ops.k8s_views._get_k8s_client')
+    @patch('ops.k8s.client._get_k8s_client')
     def test_k8s_connection_reports_certificate_hint_on_ssl_error(self, mock_get_client):
         cluster = K8sCluster.objects.create(
             name='broken-k8s',
@@ -2376,7 +2376,7 @@ class ContainerManagementTests(TestCase):
         self.assertEqual(payload['workloads_total'], 16)
         self.assertGreaterEqual(len(payload['alerts']), 1)
 
-    @patch('ops.k8s_views._build_demo_summary')
+    @patch('ops.k8s.summary._build_demo_summary')
     def test_k8s_summary_uses_short_cache(self, mock_build_demo_summary):
         cluster = K8sCluster.objects.create(
             name='demo-cluster-cache',
@@ -2410,7 +2410,7 @@ class ContainerManagementTests(TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(mock_build_demo_summary.call_count, 1)
 
-    @patch('ops.k8s_views._get_k8s_client')
+    @patch('ops.k8s.client._get_k8s_client')
     def test_k8s_summary_marks_payload_degraded_when_live_queries_timeout(self, mock_get_client):
         cluster = K8sCluster.objects.create(
             name='timeout-k8s',
@@ -2477,7 +2477,7 @@ class ContainerManagementTests(TestCase):
         self.assertTrue(any(item['level'] == 'warning' for item in payload['alerts']))
         self.assertFalse(any(item['level'] == 'success' for item in payload['alerts']))
 
-    @patch('ops.k8s_views._get_k8s_client')
+    @patch('ops.k8s.client._get_k8s_client')
     def test_k8s_pods_returns_stale_cache_when_cluster_times_out(self, mock_get_client):
         cluster = K8sCluster.objects.create(
             name='stale-cache-k8s',
@@ -2493,7 +2493,7 @@ class ContainerManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), stale_items)
 
-    @patch('ops.k8s_views._get_k8s_client')
+    @patch('ops.k8s.client._get_k8s_client')
     def test_k8s_summary_returns_stale_snapshot_when_build_fails(self, mock_get_client):
         cluster = K8sCluster.objects.create(
             name='summary-stale-k8s',
@@ -2530,7 +2530,7 @@ class ContainerManagementTests(TestCase):
         self.assertEqual(payload['pods_total'], 10)
         self.assertIn('cached snapshot', payload['alerts'][0]['message'])
 
-    @patch('ops.k8s_views._build_live_summary')
+    @patch('ops.k8s.summary._build_live_summary')
     def test_k8s_summary_does_not_cache_unreliable_zero_snapshot(self, mock_build_live_summary):
         cluster = K8sCluster.objects.create(
             name='summary-zero-degraded-k8s',
@@ -2589,7 +2589,7 @@ class ContainerManagementTests(TestCase):
         self.assertEqual(payload['workloads_total'], 5)
         self.assertIn('cached snapshot', payload['alerts'][0]['message'])
 
-    @patch('ops.k8s_views._get_k8s_client')
+    @patch('ops.k8s.client._get_k8s_client')
     def test_k8s_pod_logs_degrade_to_empty_payload_on_timeout(self, mock_get_client):
         cluster = K8sCluster.objects.create(
             name='pod-logs-timeout-k8s',

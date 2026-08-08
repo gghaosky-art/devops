@@ -35,6 +35,10 @@ from .models import (
     HostTaskScheduleExecution,
     HostTaskTemplate,
     K8sCluster,
+    K8sProject,
+    K8sProjectMember,
+    K8sWorkspace,
+    K8sWorkspaceMember,
     LogDataSource,
     LogEntry,
     MetricDataSource,
@@ -231,6 +235,23 @@ class DockerHostSerializer(serializers.ModelSerializer):
 
 class K8sClusterSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    def validate_api_server(self, value):
+        """
+        http 与 https 都放行：老集群的明文端口、或链路上已完成 TLS 终止的
+        本地代理都是合法用法。http 带来的风险改为保存后以 warnings 提示。
+
+        但 scheme 必须有——Kubernetes 客户端要求 host 带协议前缀，
+        不带前缀连不上，这是硬性技术约束而非偏好。
+        """
+        endpoint = (value or '').strip()
+        if not endpoint:
+            return endpoint
+        if not endpoint.lower().startswith(('http://', 'https://')):
+            raise serializers.ValidationError(
+                'API Server 需要带协议前缀，例如 https://10.0.0.1:6443 或 http://127.0.0.1:8080。'
+            )
+        return endpoint
 
     class Meta:
         model = K8sCluster
@@ -1683,3 +1704,87 @@ class NginxRouteSerializer(serializers.ModelSerializer):
     class Meta:
         model = NginxRoute
         fields = '__all__'
+
+
+class K8sMemberSerializer(serializers.ModelSerializer):
+    """企业空间与项目成员共用的展示结构。"""
+
+    username = serializers.CharField(source='user.username', read_only=True)
+    display_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = K8sWorkspaceMember
+        fields = ['id', 'user', 'username', 'display_name', 'role', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def get_display_name(self, obj):
+        user = obj.user
+        full_name = (user.get_full_name() or '').strip()
+        return full_name or user.username
+
+
+class K8sProjectMemberSerializer(K8sMemberSerializer):
+    class Meta(K8sMemberSerializer.Meta):
+        model = K8sProjectMember
+
+
+class K8sWorkspaceSerializer(serializers.ModelSerializer):
+    cluster_name = serializers.CharField(source='cluster.name', read_only=True)
+    cluster_status = serializers.CharField(source='cluster.status', read_only=True)
+    project_count = serializers.SerializerMethodField()
+    member_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = K8sWorkspace
+        fields = [
+            'id', 'name', 'display_name', 'cluster', 'cluster_name', 'cluster_status',
+            'description', 'quota', 'status', 'project_count', 'member_count',
+            'created_by', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def get_project_count(self, obj):
+        return obj.projects.count()
+
+    def get_member_count(self, obj):
+        return obj.members.count()
+
+    def validate_cluster(self, value):
+        # 企业空间绑定单一集群，绑定后不允许改：下辖项目的命名空间都在原集群里
+        if self.instance and self.instance.cluster_id != value.pk:
+            raise serializers.ValidationError('企业空间的所属集群不支持修改，请新建企业空间。')
+        return value
+
+    def validate_name(self, value):
+        # 标识已作为 sxdevops.io/workspace 写进集群命名空间的标签，改了会与集群失配
+        if self.instance and self.instance.name != value:
+            raise serializers.ValidationError('企业空间标识创建后不可修改，可修改「名称」用于展示。')
+        return value
+
+
+class K8sProjectSerializer(serializers.ModelSerializer):
+    workspace_name = serializers.CharField(source='workspace.display_name', read_only=True)
+    cluster = serializers.PrimaryKeyRelatedField(read_only=True)
+    cluster_name = serializers.CharField(source='cluster.name', read_only=True)
+    member_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = K8sProject
+        fields = [
+            'id', 'workspace', 'workspace_name', 'cluster', 'cluster_name',
+            'namespace', 'display_name', 'description', 'provision_mode',
+            'quota', 'limit_range', 'quota_enforced', 'member_count',
+            'created_by', 'created_at', 'updated_at',
+        ]
+        # cluster 由 workspace 推导，namespace 与创建方式定版后不可改
+        read_only_fields = ['id', 'cluster', 'created_by', 'created_at', 'updated_at']
+
+    def get_member_count(self, obj):
+        return obj.members.count()
+
+    def validate(self, attrs):
+        if self.instance:
+            for field in ('namespace', 'provision_mode', 'workspace'):
+                if field in attrs and getattr(self.instance, field) != attrs[field]:
+                    raise serializers.ValidationError({field: '该字段创建后不可修改。'})
+        return attrs

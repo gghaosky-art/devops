@@ -3,8 +3,30 @@ import { ElMessage } from 'element-plus'
 import AppLayout from '@/layout/AppLayout.vue'
 import { pinia } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
+import { K8S_TAB_PATHS, resolveLegacyK8sTab } from '@/router/k8sTabs'
 
 const TASK_SCHEDULES_VISIBLE = false
+
+const k8sResourceRoutes = [
+  { tab: 'clusters', name: 'K8sClusters', title: '集群管理', icon: 'OfficeBuilding', view: () => import('@/views/k8s/K8sClusters.vue') },
+  { tab: 'nodes', name: 'K8sNodes', title: '节点管理', icon: 'Monitor', view: () => import('@/views/k8s/K8sNodes.vue') },
+  { tab: 'namespaces', name: 'K8sNamespaces', title: '命名空间', icon: 'FolderOpened', view: () => import('@/views/k8s/K8sNamespaces.vue') },
+  { tab: 'workloads', name: 'K8sWorkloads', title: '工作负载', icon: 'Cpu', view: () => import('@/views/k8s/K8sWorkloads.vue') },
+  { tab: 'pods', name: 'K8sPods', title: 'Pod 管理', icon: 'Box', view: () => import('@/views/k8s/K8sPods.vue') },
+  { tab: 'network', name: 'K8sNetwork', title: '网络管理', icon: 'Connection', view: () => import('@/views/k8s/K8sNetwork.vue') },
+  { tab: 'storage', name: 'K8sStorage', title: '存储管理', icon: 'Coin', view: () => import('@/views/k8s/K8sStorage.vue') },
+  { tab: 'config', name: 'K8sConfigs', title: '配置管理', icon: 'Setting', view: () => import('@/views/k8s/K8sConfigs.vue') },
+].map(item => ({
+  path: K8S_TAB_PATHS[item.tab].replace(/^\//, ''),
+  name: item.name,
+  component: item.view,
+  meta: {
+    title: item.title,
+    icon: item.icon,
+    permission: 'ops.k8s.view',
+    k8sTab: item.tab,
+  },
+}))
 const observabilityBoardPermissions = ['ops.grafana.view']
 const observabilityOverviewPermissions = [
   'ops.metric.query',
@@ -201,8 +223,24 @@ const routes = [
       {
         path: 'containers/k8s',
         name: 'ContainerManageK8s',
-        component: () => import('@/views/K8sManage.vue'),
-        meta: { title: 'K8s 集群', icon: 'Connection', permission: 'ops.k8s.view' },
+        redirect: (to) => {
+          const { tab, ...query } = to.query
+          return { path: resolveLegacyK8sTab(tab), query }
+        },
+        meta: { hidden: true },
+      },
+      ...k8sResourceRoutes,
+      {
+        path: 'containers/k8s/workspaces',
+        name: 'K8sWorkspaces',
+        component: () => import('@/views/k8s/K8sWorkspaces.vue'),
+        meta: { title: '企业空间', icon: 'Grid', permission: 'ops.k8s.workspace.view' },
+      },
+      {
+        path: 'containers/k8s/projects',
+        name: 'K8sProjects',
+        component: () => import('@/views/k8s/K8sProjects.vue'),
+        meta: { title: '项目管理', icon: 'Files', permission: 'ops.k8s.project.view' },
       },
       {
         path: 'containers/docker',

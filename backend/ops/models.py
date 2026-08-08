@@ -1,7 +1,7 @@
 import uuid
 
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -1656,3 +1656,131 @@ class TransactionTicket(models.Model):
 
     def __str__(self):
         return self.title
+
+
+# ====== Kubernetes 企业空间 / 项目 ======
+# 企业空间是平台侧的逻辑租户，绑定单一集群；项目对应集群中的一个命名空间。
+# 命名空间通过下面两个标签与平台对象关联，纳管已有命名空间时也按此打标。
+K8S_WORKSPACE_LABEL = 'sxdevops.io/workspace'
+K8S_PROJECT_LABEL = 'sxdevops.io/project-id'
+
+k8s_name_validator = RegexValidator(
+    regex=r'^[a-z0-9]([-a-z0-9]*[a-z0-9])?$',
+    message='只能包含小写字母、数字和中划线，且必须以字母或数字开头结尾（DNS-1123）。',
+)
+
+
+class K8sWorkspace(models.Model):
+    """企业空间：绑定单一集群的逻辑租户。"""
+
+    STATUS_CHOICES = [
+        ('active', '启用'),
+        ('disabled', '停用'),
+    ]
+
+    name = models.CharField('标识', max_length=63, unique=True, validators=[k8s_name_validator])
+    display_name = models.CharField('名称', max_length=128)
+    cluster = models.ForeignKey(
+        K8sCluster,
+        on_delete=models.PROTECT,
+        related_name='workspaces',
+        verbose_name='所属集群',
+    )
+    description = models.CharField('描述', max_length=256, blank=True, default='')
+    # 直接使用 ResourceQuota 的 hard 键，例如 {"requests.cpu": "8", "limits.memory": "16Gi"}
+    quota = models.JSONField('配额', default=dict, blank=True)
+    status = models.CharField('状态', max_length=16, choices=STATUS_CHOICES, default='active')
+    created_by = models.CharField('创建人', max_length=64, blank=True, default='')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = 'K8s 企业空间'
+        verbose_name_plural = 'K8s 企业空间'
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return self.display_name or self.name
+
+
+class K8sWorkspaceMember(models.Model):
+    """企业空间成员。成员关系只决定可见范围，实际操作权限仍看全局 RBAC。"""
+
+    ROLE_CHOICES = [
+        ('admin', '空间管理员'),
+        ('regular', '普通成员'),
+        ('viewer', '只读成员'),
+    ]
+
+    workspace = models.ForeignKey(K8sWorkspace, on_delete=models.CASCADE, related_name='members')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='k8s_workspace_memberships')
+    role = models.CharField('角色', max_length=16, choices=ROLE_CHOICES, default='regular')
+    created_at = models.DateTimeField('加入时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'K8s 企业空间成员'
+        verbose_name_plural = 'K8s 企业空间成员'
+        ordering = ['workspace_id', 'user_id']
+        unique_together = ('workspace', 'user')
+
+    def __str__(self):
+        return f'{self.workspace_id}:{self.user_id}'
+
+
+class K8sProject(models.Model):
+    """项目：企业空间下绑定到集群某个命名空间的资源边界。"""
+
+    PROVISION_CHOICES = [
+        ('create', '平台创建'),
+        ('adopt', '纳管已有'),
+    ]
+
+    workspace = models.ForeignKey(K8sWorkspace, on_delete=models.CASCADE, related_name='projects')
+    # 冗余自 workspace.cluster，用于 (集群, 命名空间) 维度的唯一约束与查询
+    cluster = models.ForeignKey(K8sCluster, on_delete=models.PROTECT, related_name='k8s_projects')
+    namespace = models.CharField('命名空间', max_length=253, validators=[k8s_name_validator])
+    display_name = models.CharField('名称', max_length=128)
+    description = models.CharField('描述', max_length=256, blank=True, default='')
+    provision_mode = models.CharField('创建方式', max_length=16, choices=PROVISION_CHOICES, default='create')
+    quota = models.JSONField('配额', default=dict, blank=True)
+    limit_range = models.JSONField('默认资源限制', default=dict, blank=True)
+    # 关闭时配额只在平台侧展示，开启才会真正下发 ResourceQuota 到集群
+    quota_enforced = models.BooleanField('下发配额到集群', default=False)
+    created_by = models.CharField('创建人', max_length=64, blank=True, default='')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = 'K8s 项目'
+        verbose_name_plural = 'K8s 项目'
+        ordering = ['-created_at', '-id']
+        # 同一集群的同一命名空间不能被两个项目同时纳管
+        unique_together = ('cluster', 'namespace')
+
+    def save(self, *args, **kwargs):
+        if self.workspace_id:
+            self.cluster_id = self.workspace.cluster_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.workspace_id}:{self.namespace}'
+
+
+class K8sProjectMember(models.Model):
+    """项目成员，语义与企业空间成员一致。"""
+
+    ROLE_CHOICES = K8sWorkspaceMember.ROLE_CHOICES
+
+    project = models.ForeignKey(K8sProject, on_delete=models.CASCADE, related_name='members')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='k8s_project_memberships')
+    role = models.CharField('角色', max_length=16, choices=ROLE_CHOICES, default='regular')
+    created_at = models.DateTimeField('加入时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'K8s 项目成员'
+        verbose_name_plural = 'K8s 项目成员'
+        ordering = ['project_id', 'user_id']
+        unique_together = ('project', 'user')
+
+    def __str__(self):
+        return f'{self.project_id}:{self.user_id}'
