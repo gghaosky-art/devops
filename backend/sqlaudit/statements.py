@@ -179,6 +179,39 @@ def detect_multi_statement(sql_content, db_type='mysql'):
     return starters >= 2
 
 
+def normalize_for_rules(sql_content, db_type='mysql'):
+    """
+    产出一份只剩「代码位置」的文本，供关键字规则匹配。
+
+    注释整段丢弃，字符串字面量与带引号的标识符各自替换成占位符。不这么做的话
+    规则会被两类内容骗到：
+        SELECT * FROM t WHERE name = 'INTO'   -- 字面量里的关键字
+        SELECT [Delete] FROM t                -- 用关键字当列名
+    前者导致误报挡住正常查询，后者同样。占位符两侧留空格，保证 \\b 边界成立。
+    """
+    profile = get_profile(db_type)
+    parts = []
+    prev_kind = None
+
+    for kind, char in lex(sql_content, profile):
+        if kind == BATCH:
+            parts.append(' ; ')
+        elif kind == COMMENT:
+            if prev_kind != COMMENT:
+                parts.append(' ')
+        elif kind == STRING:
+            if prev_kind != STRING:
+                parts.append(' $str$ ')
+        elif kind == IDENT:
+            if prev_kind != IDENT:
+                parts.append(' $id$ ')
+        else:
+            parts.append(char)
+        prev_kind = kind
+
+    return ''.join(parts)
+
+
 def lex(sql_content, profile):
     """
     逐字符产出 (kind, char)。kind 为 BATCH 时 char 为空串，表示一个批次分隔点。

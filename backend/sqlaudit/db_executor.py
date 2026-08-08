@@ -13,9 +13,12 @@ try:
 except ImportError:  # pragma: no cover
     MongoClient = None
 
+from . import mssql_executor
+
 
 MYSQL_LIKE_TYPES = {'mysql', 'polardb'}
 MONGODB_TYPE = 'mongodb'
+SQLSERVER_TYPE = 'sqlserver'
 MYSQL_SYSTEM_DATABASES = {'information_schema', 'mysql', 'performance_schema', 'sys'}
 MONGODB_SYSTEM_DATABASES = {'admin', 'config', 'local'}
 MONGODB_READ_ACTIONS = {'find', 'aggregate', 'count', 'distinct'}
@@ -52,6 +55,9 @@ def _get_demo_profile(datasource):
 
 def validate_query_content(datasource, sql_content):
     db_type = _get_db_type(datasource)
+    if db_type == SQLSERVER_TYPE:
+        return mssql_executor.validate_query(sql_content)
+
     if db_type == MONGODB_TYPE:
         try:
             action, _ = _parse_mongodb_command(sql_content)
