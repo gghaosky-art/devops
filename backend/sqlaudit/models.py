@@ -7,6 +7,7 @@ class DataSource(models.Model):
         ('mysql', 'MySQL'),
         ('mongodb', 'MongoDB'),
         ('polardb', 'PolarDB'),
+        ('sqlserver', 'SQL Server'),
     ]
 
     name = models.CharField('名称', max_length=128, unique=True)
@@ -50,6 +51,10 @@ class SqlOrder(models.Model):
         DataSource, on_delete=models.PROTECT, verbose_name='数据源',
     )
     database = models.CharField('目标数据库', max_length=128)
+    # 仅 SQL Server 使用，MySQL / MongoDB 留空。
+    # 注意 T-SQL 的默认 schema 绑定在数据库用户上，没有 PostgreSQL search_path
+    # 那样的会话级切换，所以这个值不参与 SQL 解析，只用于审计记录与检查规则。
+    schema = models.CharField('Schema', max_length=128, blank=True, default='')
     sql_type = models.CharField(
         'SQL 类型', max_length=8, choices=SQL_TYPE_CHOICES, default='DML',
     )
@@ -82,6 +87,7 @@ class QueryOrder(models.Model):
         DataSource, on_delete=models.PROTECT, verbose_name='数据源',
     )
     database = models.CharField('目标数据库', max_length=128)
+    schema = models.CharField('Schema', max_length=128, blank=True, default='')
     sql_content = models.TextField('SQL 内容')
     submitter = models.CharField('提交人', max_length=64, default='admin')
     result_count = models.IntegerField('结果行数', null=True, blank=True)

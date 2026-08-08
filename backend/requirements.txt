@@ -6,6 +6,7 @@ django-redis>=5.4
 requests>=2.31
 pymysql>=1.1
 pymongo>=4.8
+pymssql>=2.3
 cryptography>=42.0
 paramiko>=3.4
 channels>=4.0

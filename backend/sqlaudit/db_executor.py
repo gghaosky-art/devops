@@ -42,6 +42,11 @@ DEMO_DATASOURCE_PROFILES = {
         'message': '演示数据源连接正常（模拟）',
         'databases': ['risk_events'],
     },
+    'billing-prod-mssql': {
+        'message': '演示数据源连接正常（模拟）',
+        'databases': ['billing_center', 'settlement'],
+        'schemas': ['dbo', 'report'],
+    },
 }
 
 
@@ -83,6 +88,8 @@ def test_connection(datasource):
         return _test_mysql_connection(datasource)
     if db_type == MONGODB_TYPE:
         return _test_mongodb_connection(datasource)
+    if db_type == SQLSERVER_TYPE:
+        return mssql_executor.test_connection(datasource)
     return False, f'暂不支持的数据源类型: {db_type}'
 
 
@@ -96,10 +103,25 @@ def get_databases(datasource):
         return _get_mysql_databases(datasource)
     if db_type == MONGODB_TYPE:
         return _get_mongodb_databases(datasource)
+    if db_type == SQLSERVER_TYPE:
+        return mssql_executor.list_databases(datasource)
     return []
 
 
-def execute_sql(datasource, database, sql_content):
+def get_schemas(datasource, database):
+    """
+    只有 SQL Server 有 schema 维度，其余类型返回空列表，前端据此隐藏下拉。
+    """
+    demo_profile = _get_demo_profile(datasource)
+    if demo_profile:
+        return demo_profile.get('schemas', [])
+
+    if _get_db_type(datasource) == SQLSERVER_TYPE:
+        return mssql_executor.list_schemas(datasource, database)
+    return []
+
+
+def execute_sql(datasource, database, sql_content, schema=None):
     demo_profile = _get_demo_profile(datasource)
     if demo_profile:
         return _execute_demo_sql(datasource, database, sql_content)
@@ -109,10 +131,12 @@ def execute_sql(datasource, database, sql_content):
         return _execute_mysql_sql(datasource, database, sql_content)
     if db_type == MONGODB_TYPE:
         return _execute_mongodb_write(datasource, database, sql_content)
+    if db_type == SQLSERVER_TYPE:
+        return mssql_executor.execute_write(datasource, database, sql_content, schema=schema)
     return False, 0, 0, f'暂不支持的数据源类型: {db_type}'
 
 
-def execute_query(datasource, database, sql_content, limit=200):
+def execute_query(datasource, database, sql_content, limit=200, schema=None):
     demo_profile = _get_demo_profile(datasource)
     if demo_profile:
         return _execute_demo_query(datasource, database, sql_content, limit)
@@ -122,6 +146,8 @@ def execute_query(datasource, database, sql_content, limit=200):
         return _execute_mysql_query(datasource, database, sql_content, limit)
     if db_type == MONGODB_TYPE:
         return _execute_mongodb_query(datasource, database, sql_content, limit)
+    if db_type == SQLSERVER_TYPE:
+        return mssql_executor.execute_read(datasource, database, sql_content, schema=schema, limit=limit)
     return False, [], [], 0, 0, f'暂不支持的数据源类型: {db_type}'
 
 

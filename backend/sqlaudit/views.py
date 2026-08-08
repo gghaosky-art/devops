@@ -187,7 +187,7 @@ class SqlOrderViewSet(RBACPermissionMixin, viewsets.ModelViewSet):
         order.save()
 
         success, affected, duration, log = db_executor.execute_sql(
-            order.datasource, order.database, order.sql_content,
+            order.datasource, order.database, order.sql_content, schema=order.schema,
         )
 
         order.status = 'executed' if success else 'failed'
@@ -258,7 +258,7 @@ class QueryOrderViewSet(RBACPermissionMixin, viewsets.ModelViewSet):
             )
 
         success, columns, rows, count, duration, error = db_executor.execute_query(
-            ds, database, sql_content,
+            ds, database, sql_content, schema=request.data.get('schema', ''),
         )
 
         query_order = serializer.save(
