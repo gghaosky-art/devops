@@ -5,6 +5,8 @@ SQL 语法检查规则引擎
 import json
 import re
 
+from .statements import detect_multi_statement, split_statements
+
 
 class CheckItem:
     """单条检查结果"""
@@ -32,7 +34,7 @@ def check_sql(sql_content, sql_type='DML', db_type='mysql'):
         return _check_mongodb_command(sql_content, sql_type)
 
     results = []
-    statements = _split_statements(sql_content)
+    statements = split_statements(sql_content, db_type)
 
     for idx, stmt in enumerate(statements, 1):
         stmt_stripped = stmt.strip()
@@ -40,6 +42,16 @@ def check_sql(sql_content, sql_type='DML', db_type='mysql'):
             continue
 
         upper = stmt_stripped.upper()
+
+        # T-SQL 的分号可选，脚本可能一条分号都没有。此时整段会被当成一条语句，
+        # 下面所有逐句规则都会失效——DELETE 少了 WHERE 也检查不出来。切分器不做
+        # 启发式猜测（切错就是执行半条 SQL），改在这里要求用户补齐分隔符。
+        if detect_multi_statement(stmt_stripped, db_type):
+            results.append(CheckItem(
+                'error', 'MULTI_STATEMENT_NO_DELIMITER',
+                f'语句 #{idx}: 疑似包含多条语句但缺少分隔符，请用分号或 GO 分隔，否则无法逐句审计',
+                line_no=idx,
+            ))
 
         if upper.startswith('DELETE') and 'WHERE' not in upper:
             results.append(CheckItem(
@@ -84,7 +96,12 @@ def check_sql(sql_content, sql_type='DML', db_type='mysql'):
             ))
 
         if sql_type == 'DDL' and upper.startswith('CREATE TABLE'):
-            table_match = re.search(r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"]?(\w+)[`"]?', upper)
+            # 表名可能带 schema 限定与三种引号：`t` / "t" / [dbo].[t]
+            table_match = re.search(
+                r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?'
+                r'(?:[`"\[]?\w+[`"\]]?\s*\.\s*)?[`"\[]?(\w+)[`"\]]?',
+                upper,
+            )
             if table_match:
                 table_name = table_match.group(1)
                 if not re.match(r'^[a-z][a-z0-9_]*$', table_name, re.IGNORECASE):
@@ -170,31 +187,3 @@ def _check_mongodb_command(sql_content, sql_type):
     if not results:
         results.append(CheckItem('info', 'ALL_PASSED', '所有检查项已通过'))
     return results
-
-
-def _split_statements(sql_content):
-    """
-    按分号切分 SQL 语句，简单实现。
-    忽略字符串内的分号。
-    """
-    statements = []
-    current = []
-    in_single_quote = False
-    in_double_quote = False
-
-    for char in sql_content:
-        if char == "'" and not in_double_quote:
-            in_single_quote = not in_single_quote
-        elif char == '"' and not in_single_quote:
-            in_double_quote = not in_double_quote
-        elif char == ';' and not in_single_quote and not in_double_quote:
-            statements.append(''.join(current))
-            current = []
-            continue
-        current.append(char)
-
-    remaining = ''.join(current).strip()
-    if remaining:
-        statements.append(remaining)
-
-    return statements
